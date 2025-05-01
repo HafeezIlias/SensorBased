@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ESP32 Firebase Monitor</title>
+  <style>
+    /* General Body Styling */
+    body {
+      font-family: 'Arial', sans-serif;
+      background: linear-gradient(135deg, #6a11cb, #2575fc);
+      color: #333;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    /* Container for content */
+    .container {
+      background-color: #ffffff;
+      border-radius: 20px;
+      box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+      padding: 40px;
+      width: 100%;
+      max-width: 500px;
+      margin: 20px;
+    }
+
+    /* Title Styling */
+    h2 {
+      color: #4A90E2;
+      font-size: 28px;
+      margin-bottom: 25px;
+      text-align: center;
+    }
+
+    /* Sensor Reading Cards */
+    .card {
+      background: #f8f9fa;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 15px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: bold;
+      color: #555;
+    }
+
+    .card-value {
+      font-size: 24px;
+      font-weight: bold;
+    }
+
+    .temp-value {
+      color: #FF5722;
+    }
+
+    .humidity-value {
+      color: #03A9F4;
+    }
+
+    .relay-value {
+      color: #4CAF50;
+    }
+    
+    .relay-value.off {
+      color: #F44336;
+    }
+
+    /* Button Styling */
+    .btn {
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      padding: 14px;
+      width: 100%;
+      border-radius: 8px;
+      font-size: 18px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      margin-top: 10px;
+    }
+
+    .btn:hover {
+      background-color: #45a049;
+      transform: scale(1.02);
+    }
+
+    .btn-danger {
+      background-color: #F44336;
+    }
+
+    .btn-danger:hover {
+      background-color: #d32f2f;
+    }
+
+    /* Last Updated */
+    .last-updated {
+      text-align: center;
+      margin-top: 20px;
+      color: #777;
+      font-size: 14px;
+    }
+
+    /* Loading Animation */
+    .loading {
+      text-align: center;
+      font-size: 18px;
+      color: #4A90E2;
+      margin: 20px 0;
+    }
+
+    .loading:after {
+      content: '...';
+      animation: dots 1.5s steps(5, end) infinite;
+    }
+
+    @keyframes dots {
+      0%, 20% { content: '.'; }
+      40% { content: '..'; }
+      60%, 100% { content: '...'; }
+    }
+
+    /* Form Input Styling */
+    .form-input {
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+      font-size: 16px;
+      background-color: #f4f4f4;
+    }
+
+    /* Input Focus Effect */
+    .form-input:focus {
+      border-color: #9C27B0;
+      outline: none;
+      box-shadow: 0 0 5px rgba(156, 39, 176, 0.3);
+    }
+    
+    /* Editable value styling */
+    .editable {
+      position: relative;
+      transition: background-color 0.3s;
+      padding: 5px 8px;
+      border-radius: 4px;
+    }
+    
+    .editable:hover {
+      background-color: rgba(0, 0, 0, 0.05);
+      cursor: pointer;
+    }
+    
+    .editable:focus {
+      background-color: rgba(0, 0, 0, 0.1);
+      outline: none;
+      box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+    }
+    
+    .editable:after {
+      content: '✏️';
+      font-size: 12px;
+      opacity: 0;
+      position: absolute;
+      right: -20px;
+      transition: opacity 0.2s;
+    }
+    
+    .editable:hover:after {
+      opacity: 1;
+    }
+    
+    /* Status message */
+    .status-message {
+      text-align: center;
+      margin: 15px 0 5px;
+      font-size: 14px;
+      color: #4CAF50;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h2>ESP32 Firebase Monitor</h2>
+    
+    <div id="loading" class="loading">Connecting to Firebase</div>
+    
+    <div id="sensor-data" style="display: none;">
+      <!-- Temperature Card -->
+      <div class="card">
+        <div class="card-title">Temperature</div>
+        <div class="card-value temp-value" id="temp-value">--°C</div>
+      </div>
+      
+      <!-- Humidity Card -->
+      <div class="card">
+        <div class="card-title">Humidity</div>
+        <div class="card-value humidity-value" id="humidity-value">--%</div>
+      </div>
+      
+      <!-- Display Text Card -->
+      <div class="card">
+        <div class="card-title">Display Text</div>
+        <div class="card-value editable" id="display-text-value" style="color: #9C27B0;" 
+             data-ref="displayText" contenteditable="true">--</div>
+      </div>
+      
+      <!-- User Card -->
+      <div class="card">
+        <div class="card-title">User</div>
+        <div class="card-value editable" id="user-value" style="color: #FF9800;" 
+             data-ref="user" contenteditable="true">--</div>
+      </div>
+      
+      <!-- Relay Card -->
+      <div class="card">
+        <div class="card-title">Relay Status</div>
+        <div class="card-value relay-value" id="relay-value">--</div>
+      </div>
+      
+      <!-- Toggle Button -->
+      <button class="btn" id="toggle-relay">Toggle Relay</button>
+      
+      <div class="status-message" id="status-message">Changes are saved automatically</div>
+      <div class="last-updated" id="last-updated">Last updated: --</div>
+    </div>
+  </div>
+
+  <script type="module">
+    // Import Firebase modules
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+    import { getDatabase, ref, set, onValue, update } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
+
+    // Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyDlcY8ulZWXQUfHhJHd0vbuUD0vM-6k4bA",
+      authDomain: "sensorbased-16dee.firebaseapp.com",
+      databaseURL: "https://sensorbased-16dee-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "sensorbased-16dee",
+      storageBucket: "sensorbased-16dee.firebasestorage.app",
+      messagingSenderId: "259658818719",
+      appId: "1:259658818719:web:a644edf37bd931ceb3eeaa",
+      measurementId: "G-ZBGT95EQDN"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const database = getDatabase(app);
+    
+    // References to the database
+    const tempRef = ref(database, "dht/temperature");
+    const humidityRef = ref(database, "dht/humidity");
+    const relayRef = ref(database, "relay/status");
+    const displayTextRef = ref(database, "displayText");
+    const userRef = ref(database, "user");
+    
+    // DOM elements
+    const tempValue = document.getElementById("temp-value");
+    const humidityValue = document.getElementById("humidity-value");
+    const relayValue = document.getElementById("relay-value");
+    const displayTextValue = document.getElementById("display-text-value");
+    const lastUpdated = document.getElementById("last-updated");
+    const toggleButton = document.getElementById("toggle-relay");
+    const loading = document.getElementById("loading");
+    const sensorData = document.getElementById("sensor-data");
+    const uservalue = document.getElementById("user-value");
+    
+    // Data update timestamp
+    let lastUpdateTime = null;
+    
+    // Connection status flag
+    let isConnected = false;
+        
+    // Get the user value element
+    const userValue = document.getElementById("user-value");
+    
+    // Listen for real-time changes
+    onValue(tempRef, (snapshot) => {
+      const temp = snapshot.val();
+      if (temp !== null) {
+        tempValue.textContent = `${temp}°C`;
+        updateTimestamp();
+        
+        if (!isConnected) {
+          isConnected = true;
+          loading.style.display = "none";
+          sensorData.style.display = "block";
+        }
+      }
+    }, (error) => {
+      console.error("Temperature read error:", error);
+      if (!isConnected) initializeData();
+    });
+    
+    // Listen for humidity changes
+    onValue(humidityRef, (snapshot) => {
+      const humidity = snapshot.val();
+      if (humidity !== null) {
+        humidityValue.textContent = `${humidity}%`;
+        updateTimestamp();
+      }
+    }, (error) => {
+      console.error("Humidity read error:", error);
+    });
+    
+    // Listen for relay status changes
+    onValue(relayRef, (snapshot) => {
+      const relay = snapshot.val();
+      if (relay !== null) {
+        // Convert boolean false to "OFF" and true to "ON" for display
+        const relayStatus = relay === false ? "OFF" : "ON";
+        relayValue.textContent = relayStatus;
+        
+        // Update button state and colors based on relay status
+        if (relayStatus === "ON") {
+          relayValue.classList.remove("off");
+          toggleButton.textContent = "Turn Relay OFF";
+          toggleButton.classList.remove("btn-danger");
+        } else {
+          relayValue.classList.add("off");
+          toggleButton.textContent = "Turn Relay ON";
+          toggleButton.classList.add("btn-danger");
+        }
+        
+        updateTimestamp();
+        // Show the main container if not yet visible
+        if (!isConnected) {
+          isConnected = true;
+          loading.style.display = "none";
+          sensorData.style.display = "block";
+        }
+      }
+    }, (error) => {
+      console.error("Relay read error:", error);
+    });
+    
+    // Listen for display text changes
+    onValue(displayTextRef, (snapshot) => {
+      const displayText = snapshot.val();
+      if (displayText !== null) {
+        displayTextValue.textContent = displayText;
+        updateTimestamp();
+      }
+    }, (error) => {
+      console.error("Display text read error:", error);
+    });
+    
+    // Listen for user changes
+    onValue(userRef, (snapshot) => {
+      const user = snapshot.val();
+      if (user !== null) {
+        userValue.textContent = user;
+        updateTimestamp();
+      }
+    }, (error) => {
+      console.error("User read error:", error);
+    });
+    
+    // Toggle relay state
+    toggleButton.addEventListener("click", () => {
+      // Get current state as boolean (convert text to boolean)
+      const currentState = relayValue.textContent === "ON";
+      // Set opposite boolean value
+      set(relayRef, !currentState);
+    });
+    
+    // Make values editable
+    const editableElements = document.querySelectorAll('.editable');
+    
+    // Add event listeners to editable elements
+    editableElements.forEach(element => {
+      // Save when focus is lost
+      element.addEventListener('blur', function() {
+        const newValue = this.textContent.trim();
+        const refPath = this.getAttribute('data-ref');
+        
+        if (newValue && newValue !== '--') {
+          // Get the reference based on the data-ref attribute
+          const dataRef = ref(database, refPath);
+          
+          // Update Firebase with new value
+          set(dataRef, newValue)
+            .then(() => {
+              // Show success indicator briefly
+              const statusMsg = document.getElementById('status-message');
+              statusMsg.textContent = 'Changes saved!';
+              statusMsg.style.color = '#4CAF50';
+              
+              setTimeout(() => {
+                statusMsg.textContent = 'Changes are saved automatically';
+              }, 2000);
+            })
+            .catch(error => {
+              console.error(`Error updating ${refPath}:`, error);
+              
+              // Show error indicator
+              const statusMsg = document.getElementById('status-message');
+              statusMsg.textContent = 'Error saving changes';
+              statusMsg.style.color = '#F44336';
+              
+              setTimeout(() => {
+                statusMsg.textContent = 'Changes are saved automatically';
+                statusMsg.style.color = '#4CAF50';
+              }, 2000);
+            });
+        }
+      });
+      
+      // Save when Enter is pressed (and prevent new line)
+      element.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          this.blur();
+        }
+      });
+    });
+    
+    // Remove the display text form
+    const displayTextInput = document.getElementById("display-text-input");
+    const updateDisplayTextBtn = document.getElementById("update-display-text");
+    
+    if (displayTextInput && updateDisplayTextBtn) {
+      displayTextInput.parentElement.remove();
+    }
+    
+    // Update timestamp display
+    function updateTimestamp() {
+      lastUpdateTime = new Date();
+      lastUpdated.textContent = `Last updated: ${lastUpdateTime.toLocaleTimeString()}`;
+    }
+    
+    // Set a timeout to initialize data if no connection after 5 seconds
+    setTimeout(() => {
+      if (!isConnected) {
+        initializeData();
+      }
+    }, 5000);
+  </script>
+</body>
+</html>
